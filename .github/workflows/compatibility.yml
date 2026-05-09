@@ -8,38 +8,10 @@ on:
 
 permissions: {}
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  per-go:
-    name: per-go
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        go: ["1.25", "1.26"]
+  compatibility:
     permissions:
       contents: read
-    env:
-      MISE_GO_VERSION: ${{ matrix.go }}
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-      - uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
-        with:
-          install: false
-      - run: bash compatibility.sh
-
-  compatibility:
-    name: compatibility
-    needs:
-      - per-go
-    runs-on: ubuntu-latest
-    timeout-minutes: 1
-    permissions: {}
-    steps:
-      - run: 'true'
+    uses: iwamot/workflows/.github/workflows/compatibility-go.yml@5a1f669fe305576b4e8cbbbfda639745027d3902 # v4.1.0
+    with:
+      go-versions: '["1.25","1.26"]'
