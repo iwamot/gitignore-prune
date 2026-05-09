@@ -4,6 +4,10 @@ min_version = "2026.4.8"
 install_before = "1d"
 
 [tools]
+go = "1.26.3"
+"aqua:goreleaser/goreleaser" = "2.15.4"
+"go:github.com/google/go-licenses/v2" = "v2.0.1"
+"go:golang.org/x/vuln/cmd/govulncheck" = "v1.3.0"
 
 [task_config]
 includes = [
