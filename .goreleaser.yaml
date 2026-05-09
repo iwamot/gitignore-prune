@@ -27,6 +27,7 @@ checksum:
 
 release:
   draft: true
+  use_existing_draft: true
 
 changelog:
   use: github-native
