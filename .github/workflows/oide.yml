@@ -1,0 +1,22 @@
+name: Oide
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/oide.yml
+
+permissions: {}
+
+jobs:
+  pull:
+    permissions:
+      contents: read
+    uses: iwamot/workflows/.github/workflows/oide.yml@1b26eebc34691108a09f9270c9539e03bcabdd4e # v4.0.1
+    with:
+      # renovate: datasource=github-tags depName=iwamot/repo-template
+      TEMPLATE_VERSION: v1.4.0
+    secrets:
+      RENOVATE_APP_ID: ${{ secrets.RENOVATE_APP_ID }}
+      RENOVATE_PRIVATE_KEY: ${{ secrets.RENOVATE_PRIVATE_KEY }}

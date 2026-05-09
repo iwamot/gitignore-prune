@@ -1,0 +1,29 @@
+name: Renovate
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+    inputs:
+      log-level:
+        description: 'Log level'
+        default: 'info'
+        type: choice
+        options:
+          - info
+          - debug
+
+permissions: {}
+
+jobs:
+  renovate:
+    permissions:
+      contents: read
+    uses: iwamot/workflows/.github/workflows/renovate.yml@1b26eebc34691108a09f9270c9539e03bcabdd4e # v4.0.1
+    with:
+      log-level: ${{ inputs.log-level || 'info' }}
+    secrets:
+      RENOVATE_APP_ID: ${{ secrets.RENOVATE_APP_ID }}
+      RENOVATE_PRIVATE_KEY: ${{ secrets.RENOVATE_PRIVATE_KEY }}
