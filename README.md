@@ -1,9 +1,7 @@
 # gitignore-prune
 
-[![Validate](https://github.com/iwamot/gitignore-prune/actions/workflows/validate.yml/badge.svg)](https://github.com/iwamot/gitignore-prune/actions/workflows/validate.yml)
-[![codecov](https://codecov.io/gh/iwamot/gitignore-prune/graph/badge.svg)](https://codecov.io/gh/iwamot/gitignore-prune)
-[![Go](https://img.shields.io/github/go-mod/go-version/iwamot/gitignore-prune)](https://golang.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![release](https://img.shields.io/github/v/release/iwamot/gitignore-prune)](https://github.com/iwamot/gitignore-prune/releases)
+[![Go](https://img.shields.io/github/go-mod/go-version/iwamot/gitignore-prune)](https://pkg.go.dev/github.com/iwamot/gitignore-prune)
 
 Detect `.gitignore` entries that no longer match anything in the working tree.
 
