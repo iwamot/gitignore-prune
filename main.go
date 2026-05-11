@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 
 	"github.com/iwamot/gitignore-prune/internal/format"
 	"github.com/iwamot/gitignore-prune/internal/git"
@@ -18,7 +19,9 @@ const (
 	exitUsage       = 2
 )
 
-var version = "0.0.0-dev"
+const devVersion = "0.0.0-dev"
+
+var version = devVersion
 
 const helpText = `gitignore-prune — remove .gitignore entries that match nothing in the working tree.
 
@@ -26,7 +29,7 @@ Usage:
   gitignore-prune [<path>]    inspect .gitignore files in the repo containing <path> (default: cwd)
   gitignore-prune --fix       remove unmatched entries in place
   gitignore-prune -h, --help
-  gitignore-prune -V, --version
+  gitignore-prune -v, --version
 
 Exit codes:
   0  no entries to prune, or --fix succeeded
@@ -48,7 +51,7 @@ func parseArgs(argv []string) (cliArgs, error) {
 		switch arg {
 		case "-h", "--help":
 			a.showHelp = true
-		case "-V", "--version":
+		case "-v", "--version":
 			a.showVersion = true
 		case "--fix":
 			a.fix = true
@@ -66,6 +69,27 @@ func parseArgs(argv []string) (cliArgs, error) {
 	return a, nil
 }
 
+// resolveVersion picks the most authoritative version string available.
+//
+// Priority:
+//  1. injected (set via `-ldflags '-X main.version=...'` during a GoReleaser
+//     build) when it differs from devVersion.
+//  2. info.Main.Version when present and not "(devel)" or "" — this is what
+//     `go install module@vX.Y.Z` records, even though ldflags don't apply.
+//  3. injected (devVersion) as the final fallback.
+func resolveVersion(injected string, info *debug.BuildInfo) string {
+	if injected != devVersion {
+		return injected
+	}
+	if info != nil {
+		v := info.Main.Version
+		if v != "" && v != "(devel)" {
+			return v
+		}
+	}
+	return injected
+}
+
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
@@ -81,7 +105,8 @@ func run(argv []string, stdout, stderr io.Writer) int {
 		return exitOK
 	}
 	if a.showVersion {
-		fmt.Fprintln(stdout, version)
+		info, _ := debug.ReadBuildInfo()
+		fmt.Fprintln(stdout, resolveVersion(version, info))
 		return exitOK
 	}
 

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime/debug"
 	"testing"
 
 	"github.com/iwamot/gitignore-prune/internal/testutil"
@@ -24,7 +25,7 @@ func TestParseArgs(t *testing.T) {
 		{"path then fix", []string{"p", "--fix"}, cliArgs{fix: true, path: "p"}, false},
 		{"help short", []string{"-h"}, cliArgs{showHelp: true, path: "."}, false},
 		{"help long", []string{"--help"}, cliArgs{showHelp: true, path: "."}, false},
-		{"version short", []string{"-V"}, cliArgs{showVersion: true, path: "."}, false},
+		{"version short", []string{"-v"}, cliArgs{showVersion: true, path: "."}, false},
 		{"version long", []string{"--version"}, cliArgs{showVersion: true, path: "."}, false},
 		{"unknown flag", []string{"--unknown"}, cliArgs{}, true},
 		{"two paths", []string{"a", "b"}, cliArgs{}, true},
@@ -40,6 +41,60 @@ func TestParseArgs(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("parseArgs = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestResolveVersion(t *testing.T) {
+	tests := []struct {
+		name     string
+		injected string
+		info     *debug.BuildInfo
+		want     string
+	}{
+		{
+			name:     "injected non-dev wins over build info",
+			injected: "1.2.3",
+			info:     &debug.BuildInfo{Main: debug.Module{Version: "9.9.9"}},
+			want:     "1.2.3",
+		},
+		{
+			name:     "injected non-dev wins with no build info",
+			injected: "1.2.3",
+			info:     nil,
+			want:     "1.2.3",
+		},
+		{
+			name:     "dev falls back to build info Main.Version",
+			injected: devVersion,
+			info:     &debug.BuildInfo{Main: debug.Module{Version: "v0.0.3"}},
+			want:     "v0.0.3",
+		},
+		{
+			name:     "dev with (devel) build info falls through to dev",
+			injected: devVersion,
+			info:     &debug.BuildInfo{Main: debug.Module{Version: "(devel)"}},
+			want:     devVersion,
+		},
+		{
+			name:     "dev with empty Main.Version falls through to dev",
+			injected: devVersion,
+			info:     &debug.BuildInfo{Main: debug.Module{Version: ""}},
+			want:     devVersion,
+		},
+		{
+			name:     "dev without build info falls through to dev",
+			injected: devVersion,
+			info:     nil,
+			want:     devVersion,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := resolveVersion(tt.injected, tt.info)
+			if got != tt.want {
+				t.Errorf("resolveVersion(%q, %+v) = %q, want %q", tt.injected, tt.info, got, tt.want)
 			}
 		})
 	}
