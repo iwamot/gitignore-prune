@@ -31,14 +31,7 @@ homebrew_casks:
     repository:
       owner: iwamot
       name: homebrew-tap
-      branch: "update-{{ .ProjectName }}-{{ .Tag }}"
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-      pull_request:
-        enabled: true
-        base:
-          owner: iwamot
-          name: homebrew-tap
-          branch: main
     commit_author:
       name: "iwamot-homebrew-tap[bot]"
       email: "284326920+iwamot-homebrew-tap[bot]@users.noreply.github.com"
