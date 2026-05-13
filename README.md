@@ -11,6 +11,12 @@ padded with patterns for files you might never actually produce.
 ## Usage
 
 ```bash
+brew install iwamot/tap/gitignore-prune
+```
+
+Or with Go:
+
+```bash
 go install github.com/iwamot/gitignore-prune@latest
 ```
 
