@@ -22,6 +22,19 @@ archives:
       - goos: windows
         formats: [zip]
 
+homebrew_casks:
+  - name: gitignore-prune
+    binaries:
+      - gitignore-prune
+    homepage: "https://github.com/iwamot/gitignore-prune"
+    description: "Detect .gitignore entries that no longer match anything in the working tree."
+    repository:
+      owner: iwamot
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+      pull_request:
+        enabled: true
+
 checksum:
   name_template: 'checksums.txt'
 
