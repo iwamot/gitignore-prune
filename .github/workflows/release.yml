@@ -32,6 +32,8 @@ jobs:
         with:
           client-id: ${{ secrets.HOMEBREW_TAP_APP_ID }}
           private-key: ${{ secrets.HOMEBREW_TAP_APP_PRIVATE_KEY }}
+          owner: iwamot
+          repositories: homebrew-tap
           permission-contents: write       # to push the formula branch
           permission-pull-requests: write  # to open the PR
 
