@@ -31,9 +31,14 @@ homebrew_casks:
     repository:
       owner: iwamot
       name: homebrew-tap
+      branch: "update-{{ .ProjectName }}-{{ .Tag }}"
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
       pull_request:
         enabled: true
+        base:
+          owner: iwamot
+          name: homebrew-tap
+          branch: main
 
 checksum:
   name_template: 'checksums.txt'
