@@ -39,6 +39,13 @@ homebrew_casks:
           owner: iwamot
           name: homebrew-tap
           branch: main
+    commit_author:
+      name: "iwamot-homebrew-tap[bot]"
+      email: "284326920+iwamot-homebrew-tap[bot]@users.noreply.github.com"
+    commit_msg_template: |-
+      Brew cask update for {{ .ProjectName }} version {{ .Tag }}
+
+      Signed-off-by: iwamot-homebrew-tap[bot] <284326920+iwamot-homebrew-tap[bot]@users.noreply.github.com>
 
 checksum:
   name_template: 'checksums.txt'
