@@ -34,8 +34,7 @@ jobs:
           private-key: ${{ secrets.HOMEBREW_TAP_APP_PRIVATE_KEY }}
           owner: iwamot
           repositories: homebrew-tap
-          permission-contents: write       # to push the formula branch
-          permission-pull-requests: write  # to open the PR
+          permission-contents: write  # to push the formula
 
       - uses: iwamot/actions/go-publish@09a90ef28919b6331a2930f6e61eeca11bc634de # v0.9.0
         with:
