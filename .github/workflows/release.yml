@@ -9,9 +9,12 @@ permissions: {}
 
 jobs:
   release:
-    uses: iwamot/workflows/.github/workflows/release-homebrew-tap.yml@7e1e1b73633f829ea0ac1ca934aa4d085561d61a # v7.1.0
+    uses: iwamot/workflows/.github/workflows/release-homebrew-tap.yml@1d30033350f397a683dfdf04708d1a510969e9ed # v8.0.0
     permissions:
       contents: write  # to draft and publish the GitHub Release and upload binary archives
+      id-token: write  # to mint OIDC token for attestation
+      attestations: write  # to write the provenance attestation
+      artifact-metadata: write  # to record artifact metadata for the attestation
     secrets:
       homebrew_tap_app_client_id: ${{ secrets.HOMEBREW_TAP_APP_CLIENT_ID }}
       homebrew_tap_app_private_key: ${{ secrets.HOMEBREW_TAP_APP_PRIVATE_KEY }}
