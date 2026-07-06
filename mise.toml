@@ -2,7 +2,7 @@ min_version = "2026.6.3"
 
 [tools]
 go = "1.26.4"
-"aqua:goreleaser/goreleaser" = "2.16.0"
+"aqua:goreleaser/goreleaser" = "2.17.0"
 "go:github.com/google/go-licenses/v2" = "v2.0.1"
 "go:golang.org/x/vuln/cmd/govulncheck" = "v1.5.0"
 
