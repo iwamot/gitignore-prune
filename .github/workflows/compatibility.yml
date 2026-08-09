@@ -11,6 +11,6 @@ jobs:
   compatibility:
     permissions:
       contents: read
-    uses: iwamot/workflows/.github/workflows/compatibility-go.yml@f4bb8660a94f68c9ac2228d5fad6b990adc922ff # v8.6.0
+    uses: iwamot/workflows/.github/workflows/compatibility-go.yml@ae85e64823f8d8316a33fa549c7a5ec13ab56795 # v8.6.1
     with:
       go-versions: '["1.25","1.26"]'
