@@ -83,5 +83,5 @@ version = "2.0.1"
 backend = "go:github.com/google/go-licenses/v2"
 
 [[tools."go:golang.org/x/vuln/cmd/govulncheck"]]
-version = "1.6.0"
+version = "1.7.0"
 backend = "go:golang.org/x/vuln/cmd/govulncheck"
