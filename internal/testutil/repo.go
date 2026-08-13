@@ -33,18 +33,9 @@ func SetupRepo(t *testing.T) string {
 func isolateGitEnv(t *testing.T) {
 	t.Helper()
 	for _, name := range gitEnvNames(os.Environ()) {
-		value, ok := os.LookupEnv(name)
-		if !ok {
-			continue
-		}
-		t.Cleanup(func() {
-			if err := os.Setenv(name, value); err != nil {
-				t.Errorf("restore %s: %v", name, err)
-			}
-		})
-		if err := os.Unsetenv(name); err != nil {
-			t.Fatalf("unset %s: %v", name, err)
-		}
+		value := os.Getenv(name)
+		t.Cleanup(func() { _ = os.Setenv(name, value) })
+		_ = os.Unsetenv(name)
 	}
 }
 
