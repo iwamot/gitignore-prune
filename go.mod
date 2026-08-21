@@ -6,4 +6,4 @@ module github.com/iwamot/gitignore-prune
 // together when a release leaves support. Raising it on its own would drop
 // that promise, and — since GOTOOLCHAIN defaults to auto — leave the older
 // matrix entry downloading the newer toolchain and testing it twice.
-go 1.25
+go 1.26
