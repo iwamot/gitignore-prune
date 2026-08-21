@@ -13,4 +13,4 @@ jobs:
       contents: read
     uses: iwamot/workflows/.github/workflows/compatibility-go.yml@4fc6b72645ab28986db27f0d96fc94634fda3853 # v8.8.1
     with:
-      go-versions: '["1.25","1.26"]'
+      go-versions: '["1.26","1.27"]'
