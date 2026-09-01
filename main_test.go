@@ -263,3 +263,28 @@ func TestRun_subdirGitignore(t *testing.T) {
 		t.Errorf("expected root KEEP entry: %s", output)
 	}
 }
+
+func TestRun_subdirAnchoredEntries(t *testing.T) {
+	repo := testutil.SetupRepo(t)
+	testutil.WriteFile(t, filepath.Join(repo, "subdir", ".gitignore"), "/build\nlib/out\n/missing\n")
+	testutil.WriteFile(t, filepath.Join(repo, "subdir", "build", "x"), "")
+	testutil.WriteFile(t, filepath.Join(repo, "subdir", "lib", "out"), "")
+	testutil.RunGit(t, repo, "add", "subdir/.gitignore")
+	testutil.RunGit(t, repo, "commit", "-q", "-m", "init")
+
+	var out, errBuf bytes.Buffer
+	code := run([]string{repo}, &out, &errBuf)
+	if code != exitPrunesFound {
+		t.Errorf("exit = %d, want %d (stderr: %s)", code, exitPrunesFound, errBuf.String())
+	}
+	output := out.String()
+	if !bytes.Contains(out.Bytes(), []byte("[KEEP]  /build")) {
+		t.Errorf("expected anchored entry to be kept: %s", output)
+	}
+	if !bytes.Contains(out.Bytes(), []byte("[KEEP]  lib/out")) {
+		t.Errorf("expected middle-slash entry to be kept: %s", output)
+	}
+	if !bytes.Contains(out.Bytes(), []byte("[PRUNE] /missing")) {
+		t.Errorf("expected unmatched anchored entry to be pruned: %s", output)
+	}
+}

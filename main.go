@@ -139,7 +139,6 @@ func run(argv []string, stdout, stderr io.Writer) int {
 			return exitUsage
 		}
 		content := string(contentBytes)
-		gitignoreDir := filepath.Dir(absPath)
 
 		var entries []format.Entry
 		drop := map[int]bool{}
@@ -147,7 +146,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 			if ln.Kind != parse.KindEntry {
 				continue
 			}
-			shouldPrune, err := git.ShouldPrune(gitignoreDir, ln.Text)
+			shouldPrune, err := git.ShouldPrune(repoRoot, relPath, ln.Text)
 			if err != nil {
 				fmt.Fprintln(stderr, err)
 				return exitUsage
