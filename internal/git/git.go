@@ -8,8 +8,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/iwamot/gitignore-prune/internal/pattern"
 )
 
 // RepoRoot returns the absolute path of the working tree root containing path.
@@ -42,21 +45,29 @@ func ListGitignores(repoRoot string) ([]string, error) {
 	return paths, nil
 }
 
-// ShouldPrune reports whether entryText fails to match any path in the
-// working tree, scoped to gitignoreDir. The pattern is fed to git via a
+// ShouldPrune reports whether entryText, an entry of the .gitignore at
+// gitignorePath (relative to repoRoot, as returned by ListGitignores), fails
+// to match any path in the working tree. The pattern is fed to git via a
 // one-line --exclude-from temp file, and both tracked (-c) and untracked
 // (-o) ignored listings are checked; a hit in either marks the entry as
 // matching, so it stays. A leading "!" is stripped before matching, since
 // negation does not change which paths the pattern names.
-func ShouldPrune(gitignoreDir, entryText string) (bool, error) {
-	pattern := strings.TrimPrefix(entryText, "!")
+//
+// --exclude-from knows nothing about where the .gitignore lives, so its
+// scope is restored in two parts: git runs in the .gitignore's directory so
+// that only paths below it are listed, and the pattern is reanchored to the
+// repository root (see pattern.Reanchor) because git resolves --exclude-from
+// patterns from there rather than from the current directory.
+func ShouldPrune(repoRoot, gitignorePath, entryText string) (bool, error) {
+	dir := path.Dir(gitignorePath)
+	probe := pattern.Reanchor(dir, strings.TrimPrefix(entryText, "!"))
 
 	tmp, err := os.CreateTemp("", "gitignore-prune-*.txt")
 	if err != nil {
 		return false, fmt.Errorf("create temp: %w", err)
 	}
 	defer os.Remove(tmp.Name())
-	if _, err := tmp.WriteString(pattern + "\n"); err != nil {
+	if _, err := tmp.WriteString(probe + "\n"); err != nil {
 		tmp.Close()
 		return false, fmt.Errorf("write temp: %w", err)
 	}
@@ -65,7 +76,7 @@ func ShouldPrune(gitignoreDir, entryText string) (bool, error) {
 	}
 
 	for _, mode := range []string{"-c", "-o"} {
-		out, err := exec.Command("git", "-C", gitignoreDir,
+		out, err := exec.Command("git", "-C", filepath.Join(repoRoot, filepath.FromSlash(dir)),
 			"ls-files", mode, "-i", "--exclude-from="+tmp.Name()).Output()
 		if err != nil {
 			return false, fmt.Errorf("git ls-files %s: %w", mode, err)
