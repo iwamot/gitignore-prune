@@ -27,14 +27,15 @@ func RepoRoot(path string) (string, error) {
 // ListGitignores returns repo-root-relative paths of every tracked file whose
 // basename is ".gitignore". Submodule .gitignores are excluded automatically:
 // they live in the submodule's index, not the parent's, so git ls-files at
-// the parent never sees them.
+// the parent never sees them. The listing is read NUL-separated because the
+// line-based form quotes paths with non-ASCII or special bytes.
 func ListGitignores(repoRoot string) ([]string, error) {
-	out, err := exec.Command("git", "-C", repoRoot, "ls-files").Output()
+	out, err := exec.Command("git", "-C", repoRoot, "ls-files", "-z").Output()
 	if err != nil {
 		return nil, fmt.Errorf("git ls-files: %w", err)
 	}
 	var paths []string
-	for _, line := range strings.Split(string(out), "\n") {
+	for _, line := range strings.Split(string(out), "\x00") {
 		if line == "" {
 			continue
 		}
