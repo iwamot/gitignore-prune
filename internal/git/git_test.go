@@ -65,6 +65,26 @@ func TestListGitignores(t *testing.T) {
 	}
 }
 
+// git quotes paths with non-ASCII bytes in its line-based output, so a
+// .gitignore under such a directory is only found when the listing is read
+// NUL-separated.
+func TestListGitignores_nonASCIIPath(t *testing.T) {
+	repo := testutil.SetupRepo(t)
+	testutil.WriteFile(t, filepath.Join(repo, "en", ".gitignore"), "*.log\n")
+	testutil.WriteFile(t, filepath.Join(repo, "日本", ".gitignore"), "*.tmp\n")
+	testutil.RunGit(t, repo, "add", ".")
+	testutil.RunGit(t, repo, "commit", "-q", "-m", "init")
+
+	paths, err := ListGitignores(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"en/.gitignore", "日本/.gitignore"}
+	if !reflect.DeepEqual(paths, want) {
+		t.Errorf("ListGitignores = %v, want %v", paths, want)
+	}
+}
+
 func TestListGitignores_emptyRepo(t *testing.T) {
 	repo := testutil.SetupRepo(t)
 	paths, err := ListGitignores(repo)
