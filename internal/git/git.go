@@ -35,7 +35,7 @@ func ListGitignores(repoRoot string) ([]string, error) {
 		return nil, fmt.Errorf("git ls-files: %w", err)
 	}
 	var paths []string
-	for _, line := range strings.Split(string(out), "\x00") {
+	for line := range strings.SplitSeq(string(out), "\x00") {
 		if line == "" {
 			continue
 		}
