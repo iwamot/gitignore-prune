@@ -53,8 +53,7 @@ func runBin(t *testing.T, args ...string) result {
 	if err == nil {
 		return result{stdout: so.String(), stderr: se.String(), exitCode: 0}
 	}
-	var ee *exec.ExitError
-	if errors.As(err, &ee) {
+	if ee, ok := errors.AsType[*exec.ExitError](err); ok {
 		return result{stdout: so.String(), stderr: se.String(), exitCode: ee.ExitCode()}
 	}
 	t.Fatalf("run %v: %v", args, err)
