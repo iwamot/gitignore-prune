@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/iwamot/gitignore-prune/internal/pattern"
@@ -24,13 +25,19 @@ func RepoRoot(path string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// ListGitignores returns repo-root-relative paths of every tracked file whose
-// basename is ".gitignore". Submodule .gitignores are excluded automatically:
-// they live in the submodule's index, not the parent's, so git ls-files at
-// the parent never sees them. The listing is read NUL-separated because the
-// line-based form quotes paths with non-ASCII or special bytes.
+// ListGitignores returns repo-root-relative paths, in path order, of every
+// tracked or untracked file whose basename is ".gitignore". Untracked ones
+// are included because a .gitignore copied from a template is usually
+// still unstaged the first time the tool runs. --exclude-standard keeps the
+// untracked walk out of ignored directories, so a vendored
+// node_modules/foo/.gitignore is not reported. Submodule and nested
+// repository .gitignores are excluded automatically: their files live in
+// the inner index, and the untracked walk lists an inner repository as a
+// single directory without entering it. The listing is read NUL-separated
+// because the line-based form quotes paths with non-ASCII or special
+// bytes, and sorted because git prints untracked paths before tracked ones.
 func ListGitignores(repoRoot string) ([]string, error) {
-	out, err := exec.Command("git", "-C", repoRoot, "ls-files", "-z").Output()
+	out, err := exec.Command("git", "-C", repoRoot, "ls-files", "-z", "-c", "-o", "--exclude-standard").Output()
 	if err != nil {
 		return nil, fmt.Errorf("git ls-files: %w", err)
 	}
@@ -43,6 +50,7 @@ func ListGitignores(repoRoot string) ([]string, error) {
 			paths = append(paths, line)
 		}
 	}
+	slices.Sort(paths)
 	return paths, nil
 }
 

@@ -51,7 +51,6 @@ func TestListGitignores(t *testing.T) {
 	testutil.WriteFile(t, filepath.Join(repo, ".gitignore"), "*.log\n")
 	testutil.WriteFile(t, filepath.Join(repo, "subdir", ".gitignore"), "tmp/\n")
 	testutil.WriteFile(t, filepath.Join(repo, "subdir", "README.md"), "")
-	testutil.WriteFile(t, filepath.Join(repo, "untracked", ".gitignore"), "x\n")
 	testutil.RunGit(t, repo, "add", ".gitignore", "subdir/.gitignore", "subdir/README.md")
 	testutil.RunGit(t, repo, "commit", "-q", "-m", "init")
 
@@ -60,6 +59,66 @@ func TestListGitignores(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{".gitignore", "subdir/.gitignore"}
+	if !reflect.DeepEqual(paths, want) {
+		t.Errorf("ListGitignores = %v, want %v", paths, want)
+	}
+}
+
+// A .gitignore copied from a template is usually still unstaged the first
+// time the tool runs, so untracked .gitignores are targets too.
+func TestListGitignores_untracked(t *testing.T) {
+	repo := testutil.SetupRepo(t)
+	testutil.WriteFile(t, filepath.Join(repo, ".gitignore"), "*.log\n")
+	testutil.WriteFile(t, filepath.Join(repo, "untracked", ".gitignore"), "x\n")
+
+	paths, err := ListGitignores(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{".gitignore", "untracked/.gitignore"}
+	if !reflect.DeepEqual(paths, want) {
+		t.Errorf("ListGitignores = %v, want %v", paths, want)
+	}
+}
+
+// The untracked walk must not enter ignored directories: a vendored
+// node_modules/foo/.gitignore is not the user's to prune, and a .gitignore
+// that ignores itself is invisible to git. Tracked .gitignores are listed
+// even when ignored, since the index is authoritative for them.
+func TestListGitignores_untrackedIgnoredSkipped(t *testing.T) {
+	repo := testutil.SetupRepo(t)
+	testutil.WriteFile(t, filepath.Join(repo, ".gitignore"), "node_modules/\ntmp/\nvendor/\n")
+	testutil.WriteFile(t, filepath.Join(repo, "node_modules", "foo", ".gitignore"), "*.log\n")
+	testutil.WriteFile(t, filepath.Join(repo, "tmp", ".gitignore"), "*\n")
+	testutil.WriteFile(t, filepath.Join(repo, "vendor", ".gitignore"), "*.o\n")
+	testutil.RunGit(t, repo, "add", "-f", "vendor/.gitignore")
+	testutil.RunGit(t, repo, "commit", "-q", "-m", "init")
+
+	paths, err := ListGitignores(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{".gitignore", "vendor/.gitignore"}
+	if !reflect.DeepEqual(paths, want) {
+		t.Errorf("ListGitignores = %v, want %v", paths, want)
+	}
+}
+
+// git ls-files prints untracked paths before tracked ones, so the result
+// is sorted to keep the report in path order regardless of what is staged.
+func TestListGitignores_sortedAcrossTrackedAndUntracked(t *testing.T) {
+	repo := testutil.SetupRepo(t)
+	testutil.WriteFile(t, filepath.Join(repo, ".gitignore"), "*.log\n")
+	testutil.WriteFile(t, filepath.Join(repo, "a", ".gitignore"), "x\n")
+	testutil.WriteFile(t, filepath.Join(repo, "b", ".gitignore"), "y\n")
+	testutil.RunGit(t, repo, "add", ".gitignore", "b/.gitignore")
+	testutil.RunGit(t, repo, "commit", "-q", "-m", "init")
+
+	paths, err := ListGitignores(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{".gitignore", "a/.gitignore", "b/.gitignore"}
 	if !reflect.DeepEqual(paths, want) {
 		t.Errorf("ListGitignores = %v, want %v", paths, want)
 	}
