@@ -153,6 +153,23 @@ func TestE2E_defaultModeFindsPrunes(t *testing.T) {
 	}
 }
 
+func TestE2E_untrackedGitignore(t *testing.T) {
+	repo := testutil.SetupRepo(t)
+	testutil.WriteFile(t, filepath.Join(repo, ".gitignore"), "*.log\nnonexistent/\n")
+	testutil.WriteFile(t, filepath.Join(repo, "app.log"), "")
+
+	r := runBin(t, repo)
+	if r.exitCode != 1 {
+		t.Errorf("exit = %d, want 1 (stderr: %s)", r.exitCode, r.stderr)
+	}
+	if !strings.Contains(r.stdout, "[PRUNE] nonexistent/") {
+		t.Errorf("stdout missing PRUNE line:\n%s", r.stdout)
+	}
+	if !strings.Contains(r.stdout, "[KEEP]  *.log") {
+		t.Errorf("stdout missing KEEP line:\n%s", r.stdout)
+	}
+}
+
 func TestE2E_defaultModeAllKeep(t *testing.T) {
 	repo := testutil.SetupRepo(t)
 	testutil.WriteFile(t, filepath.Join(repo, ".gitignore"), "*.log\n")
