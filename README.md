@@ -51,6 +51,11 @@ Some entries are intentionally pre-emptive (`dist/` only built during
 release, logs only one developer produces). `gitignore-prune` can't tell
 those from real cruft, but a human reading the report can.
 
+An entry for a directory that exists but is empty is reported as `[PRUNE]`,
+since git sees no files under it. This is usually a build output directory
+that hasn't been populated yet — the same "intentionally pre-emptive" case
+as above.
+
 ## Out of scope
 
 - `.git/info/exclude` is not scanned. It's local-only and never committed,
