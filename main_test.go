@@ -66,10 +66,16 @@ func TestResolveVersion(t *testing.T) {
 			want:     "1.2.3",
 		},
 		{
-			name:     "dev falls back to build info Main.Version",
+			name:     "dev falls back to build info Main.Version, without the v",
 			injected: devVersion,
 			info:     &debug.BuildInfo{Main: debug.Module{Version: "v0.0.3"}},
-			want:     "v0.0.3",
+			want:     "0.0.3",
+		},
+		{
+			name:     "only the leading v is dropped",
+			injected: devVersion,
+			info:     &debug.BuildInfo{Main: debug.Module{Version: "v1.0.0-dev"}},
+			want:     "1.0.0-dev",
 		},
 		{
 			name:     "dev with (devel) build info falls through to dev",
