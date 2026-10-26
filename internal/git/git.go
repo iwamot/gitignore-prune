@@ -57,9 +57,9 @@ func ListGitignores(repoRoot string) ([]string, error) {
 // ShouldPrune reports whether entryText, an entry of the .gitignore at
 // gitignorePath (relative to repoRoot, as returned by ListGitignores), fails
 // to match any path in the working tree. The pattern is fed to git via a
-// one-line --exclude-from temp file, and both tracked (-c) and untracked
-// (-o) ignored listings are checked; a hit in either marks the entry as
-// matching, so it stays. A leading "!" is stripped before matching, since
+// one-line --exclude-from temp file. A single ignored listing combines tracked
+// (-c) and untracked (-o) paths; a hit in either marks the entry as matching,
+// so it stays. A leading "!" is stripped before matching, since
 // negation does not change which paths the pattern names.
 //
 // --exclude-from knows nothing about where the .gitignore lives, so its
@@ -84,15 +84,10 @@ func ShouldPrune(repoRoot, gitignorePath, entryText string) (bool, error) {
 		return false, fmt.Errorf("close temp: %w", err)
 	}
 
-	for _, mode := range []string{"-c", "-o"} {
-		out, err := exec.Command("git", "-C", filepath.Join(repoRoot, filepath.FromSlash(dir)),
-			"ls-files", mode, "-i", "--exclude-from="+tmp.Name()).Output()
-		if err != nil {
-			return false, fmt.Errorf("git ls-files %s: %w", mode, err)
-		}
-		if len(bytes.TrimSpace(out)) > 0 {
-			return false, nil
-		}
+	out, err := exec.Command("git", "-C", filepath.Join(repoRoot, filepath.FromSlash(dir)),
+		"ls-files", "-c", "-o", "-i", "--exclude-from="+tmp.Name()).Output()
+	if err != nil {
+		return false, fmt.Errorf("git ls-files -c -o: %w", err)
 	}
-	return true, nil
+	return len(bytes.TrimSpace(out)) == 0, nil
 }
