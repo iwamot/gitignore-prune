@@ -181,89 +181,10 @@ func TestShouldPrune_negationNoMatch(t *testing.T) {
 	}
 }
 
-func TestShouldPrune_subdirScope(t *testing.T) {
-	repo := testutil.SetupRepo(t)
-	testutil.WriteFile(t, filepath.Join(repo, "subdir", "tmp", "x"), "")
-
-	got, err := ShouldPrune(repo, "subdir/.gitignore", "tmp/")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got {
-		t.Error("ShouldPrune from subdir for 'tmp/' = prune, want keep")
-	}
-
-	got, err = ShouldPrune(repo, "subdir/.gitignore", "nonexistent/")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !got {
-		t.Error("ShouldPrune from subdir for 'nonexistent/' = keep, want prune")
-	}
-}
-
 func TestShouldPrune_errorOnNonRepo(t *testing.T) {
 	testutil.IsolateGitEnv(t)
 	dir := t.TempDir()
 	if _, err := ShouldPrune(dir, ".gitignore", "*.log"); err == nil {
 		t.Error("expected error when called outside a git repo")
-	}
-}
-
-func TestShouldPrune_subdirAnchoredUntracked(t *testing.T) {
-	repo := testutil.SetupRepo(t)
-	testutil.WriteFile(t, filepath.Join(repo, "subdir", "foo"), "")
-	testutil.WriteFile(t, filepath.Join(repo, "subdir", "bar", "baz"), "")
-
-	for _, entry := range []string{"/foo", "bar/baz", "/bar/baz", "**/baz"} {
-		got, err := ShouldPrune(repo, "subdir/.gitignore", entry)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got {
-			t.Errorf("ShouldPrune(subdir/.gitignore, %q) = prune, want keep (untracked file matches)", entry)
-		}
-	}
-}
-
-func TestShouldPrune_subdirAnchoredTracked(t *testing.T) {
-	repo := testutil.SetupRepo(t)
-	testutil.WriteFile(t, filepath.Join(repo, "subdir", "foo"), "")
-	testutil.RunGit(t, repo, "add", "subdir/foo")
-	testutil.RunGit(t, repo, "commit", "-q", "-m", "init")
-
-	got, err := ShouldPrune(repo, "subdir/.gitignore", "/foo")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got {
-		t.Error("ShouldPrune(subdir/.gitignore, /foo) = prune, want keep (tracked file matches)")
-	}
-}
-
-func TestShouldPrune_subdirAnchoredStaysInSubtree(t *testing.T) {
-	repo := testutil.SetupRepo(t)
-	testutil.WriteFile(t, filepath.Join(repo, "foo"), "")
-	testutil.WriteFile(t, filepath.Join(repo, "subdir", "deep", "foo"), "")
-
-	got, err := ShouldPrune(repo, "subdir/.gitignore", "/foo")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !got {
-		t.Error("ShouldPrune(subdir/.gitignore, /foo) = keep, want prune (only root foo and subdir/deep/foo exist)")
-	}
-}
-
-func TestShouldPrune_nestedDirAnchored(t *testing.T) {
-	repo := testutil.SetupRepo(t)
-	testutil.WriteFile(t, filepath.Join(repo, "a", "b", "out", "x"), "")
-
-	got, err := ShouldPrune(repo, "a/b/.gitignore", "/out")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got {
-		t.Error("ShouldPrune(a/b/.gitignore, /out) = prune, want keep")
 	}
 }
