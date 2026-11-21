@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime/debug"
+	"strings"
 	"testing"
 	"testing/quick"
 
@@ -130,143 +131,120 @@ func TestRun_emptyRepo(t *testing.T) {
 	}
 }
 
-func TestRun_checkModeFindsPrunes(t *testing.T) {
-	repo := testutil.SetupRepo(t)
-	testutil.WriteFile(t, filepath.Join(repo, ".gitignore"), "*.log\nnonexistent/\n")
-	testutil.WriteFile(t, filepath.Join(repo, "app.log"), "")
-	testutil.RunGit(t, repo, "add", ".gitignore")
-	testutil.RunGit(t, repo, "commit", "-q", "-m", "init")
-
-	var out, errBuf bytes.Buffer
-	code := run([]string{repo}, &out, &errBuf)
-	if code != exitPrunesFound {
-		t.Errorf("exit = %d, want %d (stderr: %s)", code, exitPrunesFound, errBuf.String())
+func TestRunPrunesOnlyUnmatchedEntriesAndIsIdempotent(t *testing.T) {
+	hasEntry := func(report, text, label string) bool {
+		for line := range strings.SplitSeq(report, "\n") {
+			if strings.HasSuffix(line, text) && strings.TrimSpace(strings.TrimSuffix(line, text)) == label {
+				return true
+			}
+		}
+		return false
 	}
-	if !bytes.Contains(out.Bytes(), []byte("[PRUNE] nonexistent/")) {
-		t.Errorf("output missing PRUNE line: %s", out.String())
+	property := func(choices []uint8, crlf bool) bool {
+		repo := testutil.SetupRepo(t)
+		ending := "\n"
+		if crlf {
+			ending = "\r\n"
+		}
+		files := []struct{ path, original, want string }{
+			{path: ".gitignore"}, {path: "subdir/.gitignore"}, {path: "a/b/.gitignore"},
+		}
+		for i := range files {
+			files[i].original = "# 日本語 comment" + ending + ending
+			files[i].want = files[i].original
+		}
+		entries := map[string]string{}
+		var tracked []string
+		prunable := 0
+		for i, choice := range choices[:min(len(choices), 12)] {
+			file := &files[i%len(files)]
+			dir := filepath.Dir(file.path)
+			stem := fmt.Sprintf("item-%02d", i)
+			forms := []struct{ pattern, target string }{
+				{stem + "*.log", stem + "-app.log"}, {"/" + stem, stem + "/x"},
+				{"lib/" + stem, "lib/" + stem}, {"cache-" + stem + "/", "cache-" + stem + "/x"},
+			}
+			form := forms[int(choice>>2)%len(forms)]
+			text := form.pattern
+			if choice&16 != 0 {
+				text = "!" + text
+			}
+			file.original += text + ending
+			entries[text] = "[PRUNE]"
+			if choice&1 != 0 {
+				file.want += text + ending
+				entries[text] = "[KEEP]"
+				rel := filepath.Join(dir, filepath.FromSlash(form.target))
+				testutil.WriteFile(t, filepath.Join(repo, rel), "")
+				if choice&2 != 0 {
+					tracked = append(tracked, rel)
+				}
+			} else {
+				prunable++
+			}
+		}
+		for i := range files {
+			// An unterminated comment must survive both newline styles unchanged.
+			files[i].original += "# tail"
+			files[i].want += "# tail"
+			testutil.WriteFile(t, filepath.Join(repo, files[i].path), files[i].original)
+		}
+		if len(tracked) > 0 {
+			testutil.RunGit(t, repo, append([]string{"add", "-f", "--"}, tracked...)...)
+		}
+		// Check is read-only; fix removes only tagged unmatched lines; a second fix is a no-op.
+		for phase := range 3 {
+			args, wantExit := []string{repo}, exitOK
+			if phase > 0 {
+				args = []string{"--fix", repo}
+			} else if prunable > 0 {
+				wantExit = exitPrunesFound
+			}
+			var out, errBuf bytes.Buffer
+			if code := run(args, &out, &errBuf); code != wantExit || errBuf.Len() != 0 {
+				t.Logf("choices=%v CRLF=%t phase=%d: exit=%d, want %d; stderr=%q", choices, crlf, phase, code, wantExit, errBuf.String())
+				return false
+			}
+			for _, file := range files {
+				want := file.want
+				if phase == 0 {
+					want = file.original
+				}
+				got, err := os.ReadFile(filepath.Join(repo, file.path))
+				if err != nil || string(got) != want {
+					t.Logf("phase=%d file=%q: content=%q, want %q; err=%v", phase, file.path, got, want, err)
+					return false
+				}
+			}
+			if phase < 2 {
+				for text, label := range entries {
+					if !hasEntry(out.String(), text, label) {
+						t.Logf("phase=%d: missing %s %q in report %q", phase, label, text, out.String())
+						return false
+					}
+				}
+			}
+			wantSummary := "No prunable entries found."
+			if prunable > 0 && phase == 0 {
+				wantSummary = "Run with --fix"
+			} else if prunable > 0 && phase == 1 {
+				wantSummary = fmt.Sprintf("Pruned %d ", prunable)
+			}
+			if !strings.Contains(out.String(), wantSummary) {
+				t.Logf("phase=%d: missing summary %q in report %q", phase, wantSummary, out.String())
+				return false
+			}
+		}
+		return true
 	}
-	if !bytes.Contains(out.Bytes(), []byte("[KEEP]  *.log")) {
-		t.Errorf("output missing KEEP line: %s", out.String())
+	for _, choices := range [][]uint8{nil, {0}, {1}, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}} {
+		for _, crlf := range []bool{false, true} {
+			if !property(choices, crlf) {
+				t.Fatalf("pruning contract failed for %v, CRLF=%t", choices, crlf)
+			}
+		}
 	}
-}
-
-func TestRun_checkModeAllKeep(t *testing.T) {
-	repo := testutil.SetupRepo(t)
-	testutil.WriteFile(t, filepath.Join(repo, ".gitignore"), "*.log\n")
-	testutil.WriteFile(t, filepath.Join(repo, "app.log"), "")
-	testutil.RunGit(t, repo, "add", ".gitignore")
-	testutil.RunGit(t, repo, "commit", "-q", "-m", "init")
-
-	var out, errBuf bytes.Buffer
-	code := run([]string{repo}, &out, &errBuf)
-	if code != exitOK {
-		t.Errorf("exit = %d, want %d (stderr: %s)", code, exitOK, errBuf.String())
-	}
-	if !bytes.Contains(out.Bytes(), []byte("No prunable entries found.")) {
-		t.Errorf("output missing 'No prunable entries found.': %s", out.String())
-	}
-}
-
-func TestRun_fixMode(t *testing.T) {
-	repo := testutil.SetupRepo(t)
-	original := "# top comment\n*.log\n\nnonexistent/\nkeep-me/\n"
-	gitignorePath := filepath.Join(repo, ".gitignore")
-	testutil.WriteFile(t, gitignorePath, original)
-	testutil.WriteFile(t, filepath.Join(repo, "app.log"), "")
-	testutil.WriteFile(t, filepath.Join(repo, "keep-me", "x"), "")
-	testutil.RunGit(t, repo, "add", ".gitignore")
-	testutil.RunGit(t, repo, "commit", "-q", "-m", "init")
-
-	var out, errBuf bytes.Buffer
-	code := run([]string{"--fix", repo}, &out, &errBuf)
-	if code != exitOK {
-		t.Errorf("exit = %d, want %d (stderr: %s)", code, exitOK, errBuf.String())
-	}
-
-	got, err := os.ReadFile(gitignorePath)
-	if err != nil {
+	if err := quick.Check(property, &quick.Config{MaxCount: 32, Rand: rand.New(rand.NewSource(1))}); err != nil {
 		t.Fatal(err)
-	}
-	want := "# top comment\n*.log\n\nkeep-me/\n"
-	if string(got) != want {
-		t.Errorf("rewritten file mismatch\n--- got ---\n%s\n--- want ---\n%s", got, want)
-	}
-	if !bytes.Contains(out.Bytes(), []byte("Pruned 1 entry.")) {
-		t.Errorf("summary missing: %s", out.String())
-	}
-}
-
-func TestRun_fixModePreservesCRLF(t *testing.T) {
-	repo := testutil.SetupRepo(t)
-	original := "*.log\r\nnonexistent/\r\n"
-	gitignorePath := filepath.Join(repo, ".gitignore")
-	testutil.WriteFile(t, gitignorePath, original)
-	testutil.WriteFile(t, filepath.Join(repo, "app.log"), "")
-	testutil.RunGit(t, repo, "add", ".gitignore")
-	testutil.RunGit(t, repo, "commit", "-q", "-m", "init")
-
-	var out, errBuf bytes.Buffer
-	code := run([]string{"--fix", repo}, &out, &errBuf)
-	if code != exitOK {
-		t.Errorf("exit = %d, want %d (stderr: %s)", code, exitOK, errBuf.String())
-	}
-	got, err := os.ReadFile(gitignorePath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := "*.log\r\n"
-	if string(got) != want {
-		t.Errorf("CRLF preservation failed\n--- got ---\n%q\n--- want ---\n%q", got, want)
-	}
-}
-
-func TestRun_subdirGitignore(t *testing.T) {
-	repo := testutil.SetupRepo(t)
-	testutil.WriteFile(t, filepath.Join(repo, ".gitignore"), "*.log\n")
-	testutil.WriteFile(t, filepath.Join(repo, "subdir", ".gitignore"), "tmp/\nbogus/\n")
-	testutil.WriteFile(t, filepath.Join(repo, "subdir", "tmp", "x"), "")
-	testutil.WriteFile(t, filepath.Join(repo, "app.log"), "")
-	testutil.RunGit(t, repo, "add", ".gitignore", "subdir/.gitignore")
-	testutil.RunGit(t, repo, "commit", "-q", "-m", "init")
-
-	var out, errBuf bytes.Buffer
-	code := run([]string{repo}, &out, &errBuf)
-	if code != exitPrunesFound {
-		t.Errorf("exit = %d, want %d (stderr: %s)", code, exitPrunesFound, errBuf.String())
-	}
-	output := out.String()
-	if !bytes.Contains(out.Bytes(), []byte("[PRUNE] bogus/")) {
-		t.Errorf("expected subdir PRUNE entry: %s", output)
-	}
-	if !bytes.Contains(out.Bytes(), []byte("[KEEP]  tmp/")) {
-		t.Errorf("expected subdir KEEP entry: %s", output)
-	}
-	if !bytes.Contains(out.Bytes(), []byte("[KEEP]  *.log")) {
-		t.Errorf("expected root KEEP entry: %s", output)
-	}
-}
-
-func TestRun_subdirAnchoredEntries(t *testing.T) {
-	repo := testutil.SetupRepo(t)
-	testutil.WriteFile(t, filepath.Join(repo, "subdir", ".gitignore"), "/build\nlib/out\n/missing\n")
-	testutil.WriteFile(t, filepath.Join(repo, "subdir", "build", "x"), "")
-	testutil.WriteFile(t, filepath.Join(repo, "subdir", "lib", "out"), "")
-	testutil.RunGit(t, repo, "add", "subdir/.gitignore")
-	testutil.RunGit(t, repo, "commit", "-q", "-m", "init")
-
-	var out, errBuf bytes.Buffer
-	code := run([]string{repo}, &out, &errBuf)
-	if code != exitPrunesFound {
-		t.Errorf("exit = %d, want %d (stderr: %s)", code, exitPrunesFound, errBuf.String())
-	}
-	output := out.String()
-	if !bytes.Contains(out.Bytes(), []byte("[KEEP]  /build")) {
-		t.Errorf("expected anchored entry to be kept: %s", output)
-	}
-	if !bytes.Contains(out.Bytes(), []byte("[KEEP]  lib/out")) {
-		t.Errorf("expected middle-slash entry to be kept: %s", output)
-	}
-	if !bytes.Contains(out.Bytes(), []byte("[PRUNE] /missing")) {
-		t.Errorf("expected unmatched anchored entry to be pruned: %s", output)
 	}
 }
