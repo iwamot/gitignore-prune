@@ -15,7 +15,7 @@ import (
 // identity and gpgsign disabled, returning the absolute path.
 func SetupRepo(t *testing.T) string {
 	t.Helper()
-	isolateGitEnv(t)
+	IsolateGitEnv(t)
 	dir := t.TempDir()
 	RunGit(t, dir, "init", "-q", "-b", "main")
 	RunGit(t, dir, "config", "user.email", "test@example.com")
@@ -24,13 +24,13 @@ func SetupRepo(t *testing.T) string {
 	return dir
 }
 
-// isolateGitEnv drops every GIT_* variable from the process environment for
+// IsolateGitEnv drops every GIT_* variable from the process environment for
 // the rest of the test. Git hands a hook its own git environment, and
 // `git commit -- <path>` makes that GIT_INDEX_FILE an absolute path to a
 // temporary index of the repository being committed. Both the helpers here
 // and the code under test spawn git, so an inherited value sends those
 // commands at the outer repository instead of the one in t.TempDir().
-func isolateGitEnv(t *testing.T) {
+func IsolateGitEnv(t *testing.T) {
 	t.Helper()
 	for _, name := range gitEnvNames(os.Environ()) {
 		value := os.Getenv(name)

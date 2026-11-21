@@ -40,6 +40,7 @@ func TestRepoRoot_fromSubdir(t *testing.T) {
 }
 
 func TestRepoRoot_notARepo(t *testing.T) {
+	testutil.IsolateGitEnv(t)
 	dir := t.TempDir()
 	if _, err := RepoRoot(dir); err == nil {
 		t.Error("expected error for non-repo, got nil")
@@ -237,6 +238,7 @@ func TestShouldPrune_subdirScope(t *testing.T) {
 }
 
 func TestShouldPrune_errorOnNonRepo(t *testing.T) {
+	testutil.IsolateGitEnv(t)
 	dir := t.TempDir()
 	if _, err := ShouldPrune(dir, ".gitignore", "*.log"); err == nil {
 		t.Error("expected error when called outside a git repo")
