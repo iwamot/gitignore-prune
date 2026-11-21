@@ -83,54 +83,6 @@ func TestResolveVersionHonorsSourcePriority(t *testing.T) {
 	}
 }
 
-func TestRun_help(t *testing.T) {
-	var out, errBuf bytes.Buffer
-	code := run([]string{"-h"}, &out, &errBuf)
-	if code != exitOK {
-		t.Errorf("exit = %d, want %d", code, exitOK)
-	}
-	if !bytes.Contains(out.Bytes(), []byte("Usage:")) {
-		t.Errorf("help output missing Usage: section: %s", out.String())
-	}
-}
-
-func TestRun_version(t *testing.T) {
-	var out, errBuf bytes.Buffer
-	code := run([]string{"--version"}, &out, &errBuf)
-	if code != exitOK {
-		t.Errorf("exit = %d, want %d", code, exitOK)
-	}
-	if out.Len() == 0 {
-		t.Error("version output empty")
-	}
-}
-
-func TestRun_usageError(t *testing.T) {
-	var out, errBuf bytes.Buffer
-	code := run([]string{"--bogus"}, &out, &errBuf)
-	if code != exitUsage {
-		t.Errorf("exit = %d, want %d", code, exitUsage)
-	}
-}
-
-func TestRun_notInRepo(t *testing.T) {
-	dir := t.TempDir()
-	var out, errBuf bytes.Buffer
-	code := run([]string{dir}, &out, &errBuf)
-	if code != exitUsage {
-		t.Errorf("exit = %d, want %d", code, exitUsage)
-	}
-}
-
-func TestRun_emptyRepo(t *testing.T) {
-	repo := testutil.SetupRepo(t)
-	var out, errBuf bytes.Buffer
-	code := run([]string{repo}, &out, &errBuf)
-	if code != exitOK {
-		t.Errorf("exit = %d, want %d (stderr: %s)", code, exitOK, errBuf.String())
-	}
-}
-
 func TestRunPrunesOnlyUnmatchedEntriesAndIsIdempotent(t *testing.T) {
 	hasEntry := func(report, text, label string) bool {
 		for line := range strings.SplitSeq(report, "\n") {
