@@ -2,11 +2,14 @@ package main
 
 import (
 	"bytes"
+	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"reflect"
 	"runtime/debug"
 	"testing"
+	"testing/quick"
 
 	"github.com/iwamot/gitignore-prune/internal/testutil"
 )
@@ -46,63 +49,36 @@ func TestParseArgs(t *testing.T) {
 	}
 }
 
-func TestResolveVersion(t *testing.T) {
-	tests := []struct {
-		name     string
-		injected string
-		info     *debug.BuildInfo
-		want     string
-	}{
-		{
-			name:     "injected non-dev wins over build info",
-			injected: "1.2.3",
-			info:     &debug.BuildInfo{Main: debug.Module{Version: "9.9.9"}},
-			want:     "1.2.3",
-		},
-		{
-			name:     "injected non-dev wins with no build info",
-			injected: "1.2.3",
-			info:     nil,
-			want:     "1.2.3",
-		},
-		{
-			name:     "dev falls back to build info Main.Version, without the v",
-			injected: devVersion,
-			info:     &debug.BuildInfo{Main: debug.Module{Version: "v0.0.3"}},
-			want:     "0.0.3",
-		},
-		{
-			name:     "only the leading v is dropped",
-			injected: devVersion,
-			info:     &debug.BuildInfo{Main: debug.Module{Version: "v1.0.0-dev"}},
-			want:     "1.0.0-dev",
-		},
-		{
-			name:     "dev with (devel) build info falls through to dev",
-			injected: devVersion,
-			info:     &debug.BuildInfo{Main: debug.Module{Version: "(devel)"}},
-			want:     devVersion,
-		},
-		{
-			name:     "dev with empty Main.Version falls through to dev",
-			injected: devVersion,
-			info:     &debug.BuildInfo{Main: debug.Module{Version: ""}},
-			want:     devVersion,
-		},
-		{
-			name:     "dev without build info falls through to dev",
-			injected: devVersion,
-			info:     nil,
-			want:     devVersion,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := resolveVersion(tt.injected, tt.info)
-			if got != tt.want {
-				t.Errorf("resolveVersion(%q, %+v) = %q, want %q", tt.injected, tt.info, got, tt.want)
+func TestResolveVersionHonorsSourcePriority(t *testing.T) {
+	property := func(major, minor, patch uint16) bool {
+		injected := fmt.Sprintf("%d.%d.%d", major, minor, patch)
+		// Interior v characters belong to the version, even when a leading v is removed.
+		stable := fmt.Sprintf("%d.%d.%d", patch, major, minor)
+		recorded := fmt.Sprintf("%s-preview.v%d+build.v%d", stable, minor, major)
+		sources := []struct {
+			info *debug.BuildInfo
+			want string
+		}{
+			{nil, devVersion},
+			{&debug.BuildInfo{}, devVersion},
+			{&debug.BuildInfo{Main: debug.Module{Version: "(devel)"}}, devVersion},
+			{&debug.BuildInfo{Main: debug.Module{Version: stable}}, stable},
+			{&debug.BuildInfo{Main: debug.Module{Version: "v" + stable}}, stable},
+			{&debug.BuildInfo{Main: debug.Module{Version: recorded}}, recorded},
+			{&debug.BuildInfo{Main: debug.Module{Version: "v" + recorded}}, recorded},
+		}
+		for _, source := range sources {
+			gotInjected := resolveVersion(injected, source.info)
+			gotFallback := resolveVersion(devVersion, source.info)
+			if gotInjected != injected || gotFallback != source.want {
+				t.Logf("info=%+v: injected=%q, want %q; fallback=%q, want %q", source.info, gotInjected, injected, gotFallback, source.want)
+				return false
 			}
-		})
+		}
+		return true
+	}
+	if err := quick.Check(property, &quick.Config{MaxCount: 256, Rand: rand.New(rand.NewSource(1))}); err != nil {
+		t.Fatal(err)
 	}
 }
 
