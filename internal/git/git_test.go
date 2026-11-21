@@ -1,10 +1,14 @@
 package git
 
 import (
+	"fmt"
+	"maps"
+	"math/rand"
 	"os"
 	"path/filepath"
-	"reflect"
+	"slices"
 	"testing"
+	"testing/quick"
 
 	"github.com/iwamot/gitignore-prune/internal/testutil"
 )
@@ -47,112 +51,73 @@ func TestRepoRoot_notARepo(t *testing.T) {
 	}
 }
 
-func TestListGitignores(t *testing.T) {
-	repo := testutil.SetupRepo(t)
-	testutil.WriteFile(t, filepath.Join(repo, ".gitignore"), "*.log\n")
-	testutil.WriteFile(t, filepath.Join(repo, "subdir", ".gitignore"), "tmp/\n")
-	testutil.WriteFile(t, filepath.Join(repo, "subdir", "README.md"), "")
-	testutil.RunGit(t, repo, "add", ".gitignore", "subdir/.gitignore", "subdir/README.md")
-	testutil.RunGit(t, repo, "commit", "-q", "-m", "init")
-
-	paths, err := ListGitignores(repo)
-	if err != nil {
+// Listing depends on visibility and index membership, not on how Git groups
+// tracked and untracked paths in its output.
+func TestListGitignoresPreservesVisibleInventory(t *testing.T) {
+	emptyRepo := testutil.SetupRepo(t)
+	if paths, err := ListGitignores(emptyRepo); err != nil || len(paths) != 0 {
+		t.Fatalf("empty repository: paths = %q, err = %v", paths, err)
+	}
+	property := func(choices []uint8) bool {
+		repo := testutil.SetupRepo(t)
+		testutil.WriteFile(t, filepath.Join(repo, ".gitignore"), "/ignored/\n")
+		want := map[string]bool{".gitignore": true}
+		tracked := []string{}
+		for i, choice := range choices {
+			// The low bits choose independent tracked/ignored states; the rest vary paths.
+			prefix := "visible"
+			if choice&2 != 0 {
+				prefix = "ignored"
+			}
+			names := []string{"plain", "日本語", "with spaces", "nested/deep", "[brackets]"}
+			dir := fmt.Sprintf("%s/case-%02d/%s", prefix, i, names[int(choice>>2)%len(names)])
+			for _, name := range []string{".gitignore", ".gitignore.bak", "prefix.gitignore"} {
+				rel := dir + "/" + name
+				testutil.WriteFile(t, filepath.Join(repo, filepath.FromSlash(rel)), "")
+				if choice&1 != 0 {
+					tracked = append(tracked, rel)
+				}
+			}
+			if choice&1 != 0 || choice&2 == 0 {
+				want[dir+"/.gitignore"] = true
+			}
+		}
+		// An untracked .gitignore can also exclude itself.
+		testutil.WriteFile(t, filepath.Join(repo, "self-ignored", ".gitignore"), ".gitignore\n")
+		if len(tracked) > 0 {
+			testutil.RunGit(t, repo, append([]string{"add", "-f", "--"}, tracked...)...)
+		}
+		checkInventory := func() bool {
+			paths, err := ListGitignores(repo)
+			if err != nil || len(paths) != len(want) || !slices.IsSorted(paths) {
+				t.Logf("choices %v: paths = %q, want inventory %v, err = %v", choices, paths, want, err)
+				return false
+			}
+			remaining := maps.Clone(want)
+			for _, rel := range paths {
+				if !remaining[rel] {
+					t.Logf("choices %v: unexpected or duplicate path %q", choices, rel)
+					return false
+				}
+				delete(remaining, rel)
+			}
+			return len(remaining) == 0
+		}
+		if !checkInventory() {
+			return false
+		}
+		// Staging visible files must preserve their inclusion and ordering.
+		visible := slices.Sorted(maps.Keys(want))
+		testutil.RunGit(t, repo, append([]string{"add", "-f", "--"}, visible...)...)
+		return checkInventory()
+	}
+	for _, choices := range [][]uint8{nil, {0}, {1}, {2}, {3}, {0, 1, 2, 3}} {
+		if !property(choices) {
+			t.Fatalf("listing contract failed for %v", choices)
+		}
+	}
+	if err := quick.Check(property, &quick.Config{MaxCount: 64, Rand: rand.New(rand.NewSource(1))}); err != nil {
 		t.Fatal(err)
-	}
-	want := []string{".gitignore", "subdir/.gitignore"}
-	if !reflect.DeepEqual(paths, want) {
-		t.Errorf("ListGitignores = %v, want %v", paths, want)
-	}
-}
-
-// A .gitignore copied from a template is usually still unstaged the first
-// time the tool runs, so untracked .gitignores are targets too.
-func TestListGitignores_untracked(t *testing.T) {
-	repo := testutil.SetupRepo(t)
-	testutil.WriteFile(t, filepath.Join(repo, ".gitignore"), "*.log\n")
-	testutil.WriteFile(t, filepath.Join(repo, "untracked", ".gitignore"), "x\n")
-
-	paths, err := ListGitignores(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := []string{".gitignore", "untracked/.gitignore"}
-	if !reflect.DeepEqual(paths, want) {
-		t.Errorf("ListGitignores = %v, want %v", paths, want)
-	}
-}
-
-// The untracked walk must not enter ignored directories: a vendored
-// node_modules/foo/.gitignore is not the user's to prune, and a .gitignore
-// that ignores itself is invisible to git. Tracked .gitignores are listed
-// even when ignored, since the index is authoritative for them.
-func TestListGitignores_untrackedIgnoredSkipped(t *testing.T) {
-	repo := testutil.SetupRepo(t)
-	testutil.WriteFile(t, filepath.Join(repo, ".gitignore"), "node_modules/\ntmp/\nvendor/\n")
-	testutil.WriteFile(t, filepath.Join(repo, "node_modules", "foo", ".gitignore"), "*.log\n")
-	testutil.WriteFile(t, filepath.Join(repo, "tmp", ".gitignore"), "*\n")
-	testutil.WriteFile(t, filepath.Join(repo, "vendor", ".gitignore"), "*.o\n")
-	testutil.RunGit(t, repo, "add", "-f", "vendor/.gitignore")
-	testutil.RunGit(t, repo, "commit", "-q", "-m", "init")
-
-	paths, err := ListGitignores(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := []string{".gitignore", "vendor/.gitignore"}
-	if !reflect.DeepEqual(paths, want) {
-		t.Errorf("ListGitignores = %v, want %v", paths, want)
-	}
-}
-
-// git ls-files prints untracked paths before tracked ones, so the result
-// is sorted to keep the report in path order regardless of what is staged.
-func TestListGitignores_sortedAcrossTrackedAndUntracked(t *testing.T) {
-	repo := testutil.SetupRepo(t)
-	testutil.WriteFile(t, filepath.Join(repo, ".gitignore"), "*.log\n")
-	testutil.WriteFile(t, filepath.Join(repo, "a", ".gitignore"), "x\n")
-	testutil.WriteFile(t, filepath.Join(repo, "b", ".gitignore"), "y\n")
-	testutil.RunGit(t, repo, "add", ".gitignore", "b/.gitignore")
-	testutil.RunGit(t, repo, "commit", "-q", "-m", "init")
-
-	paths, err := ListGitignores(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := []string{".gitignore", "a/.gitignore", "b/.gitignore"}
-	if !reflect.DeepEqual(paths, want) {
-		t.Errorf("ListGitignores = %v, want %v", paths, want)
-	}
-}
-
-// git quotes paths with non-ASCII bytes in its line-based output, so a
-// .gitignore under such a directory is only found when the listing is read
-// NUL-separated.
-func TestListGitignores_nonASCIIPath(t *testing.T) {
-	repo := testutil.SetupRepo(t)
-	testutil.WriteFile(t, filepath.Join(repo, "en", ".gitignore"), "*.log\n")
-	testutil.WriteFile(t, filepath.Join(repo, "日本", ".gitignore"), "*.tmp\n")
-	testutil.RunGit(t, repo, "add", ".")
-	testutil.RunGit(t, repo, "commit", "-q", "-m", "init")
-
-	paths, err := ListGitignores(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := []string{"en/.gitignore", "日本/.gitignore"}
-	if !reflect.DeepEqual(paths, want) {
-		t.Errorf("ListGitignores = %v, want %v", paths, want)
-	}
-}
-
-func TestListGitignores_emptyRepo(t *testing.T) {
-	repo := testutil.SetupRepo(t)
-	paths, err := ListGitignores(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(paths) != 0 {
-		t.Errorf("ListGitignores = %v, want empty", paths)
 	}
 }
 
