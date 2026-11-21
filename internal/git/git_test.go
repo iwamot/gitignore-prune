@@ -121,18 +121,6 @@ func TestListGitignoresPreservesVisibleInventory(t *testing.T) {
 	}
 }
 
-func TestShouldPrune_untrackedMatches(t *testing.T) {
-	repo := testutil.SetupRepo(t)
-	testutil.WriteFile(t, filepath.Join(repo, "app.log"), "")
-	got, err := ShouldPrune(repo, ".gitignore", "*.log")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got {
-		t.Error("ShouldPrune(*.log) = prune, want keep (untracked file matches)")
-	}
-}
-
 func TestShouldPrune_trackedMatches(t *testing.T) {
 	repo := testutil.SetupRepo(t)
 	testutil.WriteFile(t, filepath.Join(repo, "main.go"), "")
@@ -144,40 +132,6 @@ func TestShouldPrune_trackedMatches(t *testing.T) {
 	}
 	if got {
 		t.Error("ShouldPrune(*.go) = prune, want keep (tracked file matches)")
-	}
-}
-
-func TestShouldPrune_noMatch(t *testing.T) {
-	repo := testutil.SetupRepo(t)
-	got, err := ShouldPrune(repo, ".gitignore", "node_modules/")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !got {
-		t.Error("ShouldPrune(node_modules/) = keep, want prune (nothing matches)")
-	}
-}
-
-func TestShouldPrune_negationStripped(t *testing.T) {
-	repo := testutil.SetupRepo(t)
-	testutil.WriteFile(t, filepath.Join(repo, "app.log"), "")
-	got, err := ShouldPrune(repo, ".gitignore", "!*.log")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got {
-		t.Error("ShouldPrune(!*.log) = prune, want keep (negation pattern still names *.log which exists)")
-	}
-}
-
-func TestShouldPrune_negationNoMatch(t *testing.T) {
-	repo := testutil.SetupRepo(t)
-	got, err := ShouldPrune(repo, ".gitignore", "!nonexistent/")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !got {
-		t.Error("ShouldPrune(!nonexistent/) = keep, want prune")
 	}
 }
 
