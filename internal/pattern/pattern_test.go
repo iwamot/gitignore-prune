@@ -2,14 +2,12 @@ package pattern_test
 
 import (
 	"errors"
-	"math/rand"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
 	"testing"
-	"testing/quick"
 
 	gitio "github.com/iwamot/gitignore-prune/internal/git"
 	"github.com/iwamot/gitignore-prune/internal/testutil"
@@ -30,14 +28,12 @@ func TestReanchorPreservesGitMatching(t *testing.T) {
 	indexOnly := []string{"build/ ", "sub/build/ ", "a/b/build/ "}
 	emptyBlob := strings.TrimSpace(testutil.RunGit(t, repo, "hash-object", "-w", "--stdin"))
 	patterns := []string{
-		"foo", "/foo", "bar/baz", "*.log", "cache/", "/tree/", "**/foo", "tree/**",
+		"foo", "/foo", "bar/baz", "/bar/baz", "*.log", "cache/", "/tree/", "/tree", "**/foo", "**/baz", "tree/**",
 		"cache/  ", "build/\\ ", "build/\\", "a b/c", "\\#literal", "\\!literal", "missing",
 	}
 	dirs := []string{".", "sub", "a/b", "empty"}
 	previous := ""
-	property := func(patternChoice, dirChoice uint8, negated, tracked bool) bool {
-		p := patterns[int(patternChoice)%len(patterns)]
-		dir := dirs[int(dirChoice)%len(dirs)]
+	property := func(p, dir string, negated, tracked bool) bool {
 		ignore := path.Join(dir, ".gitignore")
 		if previous != "" {
 			if err := os.Remove(filepath.Join(repo, filepath.FromSlash(previous))); err != nil {
@@ -82,7 +78,16 @@ func TestReanchorPreservesGitMatching(t *testing.T) {
 		}
 		return got == want
 	}
-	if err := quick.Check(property, &quick.Config{MaxCount: 256, Rand: rand.New(rand.NewSource(1))}); err != nil {
-		t.Fatal(err)
+	// The fixture domains are finite, so check every combination against Git.
+	for _, p := range patterns {
+		for _, dir := range dirs {
+			for _, negated := range []bool{false, true} {
+				for _, tracked := range []bool{false, true} {
+					if !property(p, dir, negated, tracked) {
+						t.FailNow()
+					}
+				}
+			}
+		}
 	}
 }
