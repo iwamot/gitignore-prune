@@ -1,87 +1,53 @@
 package parse
 
 import (
-	"reflect"
+	"math/rand"
+	"slices"
+	"strings"
 	"testing"
+	"testing/quick"
 )
 
-func TestParse(t *testing.T) {
-	tests := []struct {
-		name string
-		in   string
-		want []Line
+func TestParsePreservesGeneratedLinesAndKinds(t *testing.T) {
+	bodies := []struct {
+		text string
+		kind Kind
 	}{
-		{
-			name: "empty",
-			in:   "",
-			want: nil,
-		},
-		{
-			name: "single entry without trailing newline",
-			in:   "*.log",
-			want: []Line{{LineNo: 1, Kind: KindEntry, Text: "*.log"}},
-		},
-		{
-			name: "single entry with trailing newline",
-			in:   "*.log\n",
-			want: []Line{{LineNo: 1, Kind: KindEntry, Text: "*.log"}},
-		},
-		{
-			name: "comment",
-			in:   "# comment\n",
-			want: []Line{{LineNo: 1, Kind: KindComment, Text: "# comment"}},
-		},
-		{
-			name: "blank line (empty)",
-			in:   "\n",
-			want: []Line{{LineNo: 1, Kind: KindBlank, Text: ""}},
-		},
-		{
-			name: "blank line (whitespace only)",
-			in:   "   \n",
-			want: []Line{{LineNo: 1, Kind: KindBlank, Text: "   "}},
-		},
-		{
-			name: "crlf line endings",
-			in:   "*.log\r\n",
-			want: []Line{{LineNo: 1, Kind: KindEntry, Text: "*.log"}},
-		},
-		{
-			name: "escaped hash is entry",
-			in:   "\\#foo",
-			want: []Line{{LineNo: 1, Kind: KindEntry, Text: "\\#foo"}},
-		},
-		{
-			name: "negation is entry",
-			in:   "!*.log",
-			want: []Line{{LineNo: 1, Kind: KindEntry, Text: "!*.log"}},
-		},
-		{
-			name: "mixed kinds with line numbers",
-			in:   "*.log\n# comment\n\nfoo/",
-			want: []Line{
-				{LineNo: 1, Kind: KindEntry, Text: "*.log"},
-				{LineNo: 2, Kind: KindComment, Text: "# comment"},
-				{LineNo: 3, Kind: KindBlank, Text: ""},
-				{LineNo: 4, Kind: KindEntry, Text: "foo/"},
-			},
-		},
-		{
-			name: "mixed line endings preserved as content but stripped from Text",
-			in:   "a\r\nb\nc",
-			want: []Line{
-				{LineNo: 1, Kind: KindEntry, Text: "a"},
-				{LineNo: 2, Kind: KindEntry, Text: "b"},
-				{LineNo: 3, Kind: KindEntry, Text: "c"},
-			},
-		},
+		{"", KindBlank}, {"   ", KindBlank}, {"\t", KindBlank}, {"\u2003", KindBlank},
+		{"#", KindComment}, {"# comment", KindComment}, {"# 日本語", KindComment}, {"# inner\rvalue", KindComment},
+		{"*.log", KindEntry}, {"foo/", KindEntry}, {"\\#foo", KindEntry}, {"!*.log", KindEntry},
+		{" #literal", KindEntry}, {"日本語", KindEntry}, {"inner\rvalue", KindEntry}, {"name  ", KindEntry},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := Parse(tt.in)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Parse(%q) = %#v, want %#v", tt.in, got, tt.want)
+	endings := []struct{ raw, suffix string }{{"\n", ""}, {"\r\n", ""}, {"\r\r\n", "\r"}}
+	property := func(choices []uint8, finalNewline bool) bool {
+		var fragments []string
+		var want []Line
+		for index, choice := range choices {
+			body := bodies[int(choice)%len(bodies)]
+			ending := endings[int(choice>>4)%len(endings)]
+			if index == len(choices)-1 && !finalNewline {
+				ending.raw, ending.suffix = "", ""
+				if choice&128 != 0 {
+					ending.raw = "\r"
+				}
 			}
-		})
+			fragment := body.text + ending.raw
+			if fragment == "" {
+				continue // An empty final fragment is not an additional physical line.
+			}
+			fragments = append(fragments, fragment)
+			want = append(want, Line{LineNo: len(want) + 1, Kind: body.kind, Text: body.text + ending.suffix})
+		}
+		// Kinds and line boundaries are known when inputs are generated;
+		// the oracle does not split or classify the assembled document.
+		content := strings.Join(fragments, "")
+		if got := Parse(content); !slices.Equal(got, want) {
+			t.Logf("Parse(%q) = %#v, want %#v", content, got, want)
+			return false
+		}
+		return true
+	}
+	if err := quick.Check(property, &quick.Config{MaxCount: 512, Rand: rand.New(rand.NewSource(1))}); err != nil {
+		t.Fatal(err)
 	}
 }
