@@ -15,23 +15,28 @@ import (
 
 func TestReanchorPreservesGitMatching(t *testing.T) {
 	repo := testutil.SetupRepo(t)
-	files := []string{
-		"foo", "app.log", "bar/baz", "build/root", "tree/root", "a b/c", "#literal", "!literal",
-		"sub/deep/foo", "sub/deep/app.log", "sub/bar/baz", "sub/deep/build/item", "sub/tree/child", "sub/a b/c", "sub/deep/cache/item",
-		"a/b/foo", "a/b/deep/app.log", "a/b/bar/baz", "a/b/deep/build/item", "a/b/tree/child", "a/b/a b/c", "a/b/deep/cache/item",
+	files := []string{"foo", "app.log", "bar/baz", "build/root", "tree/root", "a b/c", "#literal", "!literal"}
+	// Git's index can represent trailing-space names without checking them
+	// out on filesystems that cannot create them.
+	indexOnly := []string{"build/ "}
+	// Directory names that Git would read as glob syntax, a comment or a
+	// negation if the directory were written into a pattern as it is.
+	nested := []string{"sub", "a/b", "[ab]", `a\b`, "a?c", "s*", "#x", "!x"}
+	for _, dir := range nested {
+		for _, name := range []string{"deep/foo", "deep/app.log", "bar/baz", "deep/build/item", "tree/child", "a b/c", "deep/cache/item"} {
+			files = append(files, dir+"/"+name)
+		}
+		indexOnly = append(indexOnly, dir+"/build/ ")
 	}
 	for _, name := range files {
 		testutil.WriteFile(t, filepath.Join(repo, filepath.FromSlash(name)), "")
 	}
-	// Git's index can represent trailing-space names without checking them
-	// out on filesystems that cannot create them.
-	indexOnly := []string{"build/ ", "sub/build/ ", "a/b/build/ "}
 	emptyBlob := strings.TrimSpace(testutil.RunGit(t, repo, "hash-object", "-w", "--stdin"))
 	patterns := []string{
 		"foo", "/foo", "bar/baz", "/bar/baz", "*.log", "cache/", "/tree/", "/tree", "**/foo", "**/baz", "tree/**",
 		"cache/  ", "build/\\ ", "build/\\", "a b/c", "\\#literal", "\\!literal", "missing",
 	}
-	dirs := []string{".", "sub", "a/b", "empty"}
+	dirs := append([]string{".", "empty"}, nested...)
 	previous := ""
 	property := func(p, dir string, negated, tracked bool) bool {
 		ignore := path.Join(dir, ".gitignore")
@@ -46,9 +51,11 @@ func TestReanchorPreservesGitMatching(t *testing.T) {
 		if tracked {
 			testutil.RunGit(t, repo, "add", "-f", "--", ".")
 		}
+		addIndexOnly := []string{"update-index", "--add"}
 		for _, name := range indexOnly {
-			testutil.RunGit(t, repo, "update-index", "--add", "--cacheinfo", "100644,"+emptyBlob+","+name)
+			addIndexOnly = append(addIndexOnly, "--cacheinfo", "100644,"+emptyBlob+","+name)
 		}
+		testutil.RunGit(t, repo, addIndexOnly...)
 
 		// The oracle reads the original pattern from its actual .gitignore.
 		// --no-index includes tracked paths; the prune API treats a negation

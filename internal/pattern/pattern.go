@@ -14,13 +14,16 @@ import "strings"
 // patterns without a directory separator (they match at any depth), so those
 // are returned unchanged; a separator at the beginning or in the middle
 // anchors the pattern, and dir is prepended so that it stays pointed at the
-// same subtree.
+// same subtree. dir is a path, not a pattern, so the characters Git reads as
+// glob syntax are escaped to name the directory literally.
 func Reanchor(dir, p string) string {
 	if dir == "." || !anchored(p) {
 		return p
 	}
-	return "/" + dir + "/" + strings.TrimPrefix(p, "/")
+	return "/" + globEscaper.Replace(dir) + "/" + strings.TrimPrefix(p, "/")
 }
+
+var globEscaper = strings.NewReplacer(`\`, `\\`, "*", `\*`, "?", `\?`, "[", `\[`)
 
 // anchored reports whether git treats p as relative to its .gitignore's
 // directory: once trailing spaces are trimmed the way git trims them, a
